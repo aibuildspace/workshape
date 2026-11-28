@@ -30,15 +30,6 @@ export function db() {
       user_id TEXT NOT NULL REFERENCES users(id),
       expires_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS pilot_profiles (
-      profile_key TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE REFERENCES users(id)
-    );
-    CREATE TABLE IF NOT EXISTS pilot_sessions (
-      token_hash TEXT PRIMARY KEY,
-      profile_key TEXT NOT NULL REFERENCES pilot_profiles(profile_key),
-      expires_at INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS mcp_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),
@@ -72,6 +63,38 @@ export function db() {
       PRIMARY KEY (source_id, target_id),
       CHECK (source_id <> target_id)
     );
+    CREATE TABLE IF NOT EXISTS process_ownership_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      process_id TEXT NOT NULL REFERENCES processes(id),
+      from_owner_id TEXT REFERENCES users(id),
+      to_owner_id TEXT NOT NULL REFERENCES users(id),
+      changed_by TEXT NOT NULL REFERENCES users(id),
+      changed_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS process_question_resolutions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      process_id TEXT NOT NULL REFERENCES processes(id),
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      target_kind TEXT NOT NULL CHECK (target_kind IN ('process', 'routing', 'field')),
+      target_key TEXT,
+      target_label TEXT NOT NULL,
+      resolved_by TEXT NOT NULL REFERENCES users(id),
+      resolved_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS process_question_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      process_id TEXT NOT NULL REFERENCES processes(id),
+      question_index INTEGER NOT NULL,
+      question TEXT NOT NULL,
+      assignee_id TEXT NOT NULL REFERENCES users(id),
+      assigned_by TEXT NOT NULL REFERENCES users(id),
+      assigned_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_by TEXT REFERENCES users(id),
+      revoked_at TEXT,
+      completed_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS cases (
       id TEXT PRIMARY KEY,
       process_id TEXT NOT NULL,
@@ -95,12 +118,50 @@ export function db() {
       actor_id TEXT NOT NULL REFERENCES users(id),
       kind TEXT NOT NULL,
       note TEXT NOT NULL,
+      clarification_reason TEXT,
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_answer_changes (
+      event_id INTEGER PRIMARY KEY REFERENCES case_events(id),
+      previous_answers TEXT NOT NULL,
+      updated_answers TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_delegations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id TEXT NOT NULL REFERENCES cases(id),
+      step TEXT NOT NULL CHECK (step IN ('manager_review', 'hr_review')),
+      delegator_id TEXT NOT NULL REFERENCES users(id),
+      delegate_id TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      ended_at TEXT,
+      end_kind TEXT CHECK (end_kind IN ('revoked', 'expired', 'decision', 'state_changed'))
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      case_id TEXT NOT NULL REFERENCES cases(id),
+      kind TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      read_at TEXT
     );
     CREATE INDEX IF NOT EXISTS cases_requester ON cases(requester_id);
     CREATE INDEX IF NOT EXISTS cases_assigned ON cases(assigned_id);
     CREATE INDEX IF NOT EXISTS case_events_case ON case_events(case_id, id);
+    CREATE INDEX IF NOT EXISTS case_delegations_case ON case_delegations(case_id, id);
+    CREATE UNIQUE INDEX IF NOT EXISTS case_delegation_open ON case_delegations(case_id) WHERE ended_at IS NULL;
+    CREATE INDEX IF NOT EXISTS process_ownership_events_process ON process_ownership_events(process_id, id);
+    CREATE INDEX IF NOT EXISTS process_question_resolutions_process ON process_question_resolutions(process_id, id);
+    CREATE INDEX IF NOT EXISTS process_question_assignments_process ON process_question_assignments(process_id, question_index, id);
+    CREATE INDEX IF NOT EXISTS process_question_assignments_assignee ON process_question_assignments(assignee_id, expires_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS process_question_assignment_open ON process_question_assignments(process_id, question_index)
+      WHERE revoked_at IS NULL AND completed_at IS NULL;
+    CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, read_at, id);
   `);
+  const eventColumns = database.prepare("PRAGMA table_info(case_events)").all() as { name: string }[];
+  if (!eventColumns.some((column) => column.name === "clarification_reason")) {
+    database.exec("ALTER TABLE case_events ADD COLUMN clarification_reason TEXT");
+  }
   connection = database;
   return database;
 }

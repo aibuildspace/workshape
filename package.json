@@ -14,7 +14,8 @@
     "check": "next typegen && tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "account": "node --env-file-if-exists=.env --import tsx scripts/account.ts",
-    "seed:pilot": "node --env-file-if-exists=.env --import tsx scripts/seed-pilot.ts"
+    "backup": "node --env-file-if-exists=.env --import tsx scripts/backup.ts",
+    "mcp:stdio": "node --env-file-if-exists=.env scripts/mcp-stdio.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.125",

@@ -2,27 +2,18 @@ import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { SignIn } from "@/components/forms";
 import { hasAccounts } from "@/lib/accounts";
-import { pilotProfiles } from "@/lib/pilot";
-import { currentActor, localPilotEnabled } from "@/lib/web-auth";
-import { enterLocalPilot } from "../actions";
+import { currentActor } from "@/lib/web-auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   if (await currentActor()) redirect("/");
-  const pilot = await localPilotEnabled();
-  if (pilot) return <main className="login-screen"><div className="login-panel">
-    <Brand />
-    <h1>Open the local pilot</h1>
-    <p className="muted">Use the pilot admin to switch between seeded profiles.</p>
-    {pilotProfiles().some((profile) => profile.profile_key === "admin") ?
-      <form action={enterLocalPilot}><button className="button button-primary">Open as pilot admin</button></form> :
-      <p className="notice">Run <code>npm run seed:pilot</code>, then reload this page.</p>}
-  </div></main>;
+  const { passwordChanged } = await searchParams;
   return <main className="login-screen">
     <div className="login-panel">
       <Brand />
       <h1>Sign in to Workshape</h1>
       <p className="muted">Access your requests and process workspace.</p>
-      {!hasAccounts() && <p className="notice">No accounts have been provisioned. Create the first HR function owner using the account setup instructions in the project README.</p>}
+      {passwordChanged === "1" && <p className="notice success" role="status">Password changed. Sign in with your new password.</p>}
+      {!hasAccounts() && <p className="notice">No accounts exist yet. An administrator must create the first HR function owner with <code>npm run account -- add</code> on the server. See the setup steps in the README.</p>}
       <SignIn />
     </div>
   </main>;

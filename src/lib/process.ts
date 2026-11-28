@@ -62,6 +62,12 @@ export const definitionSchema = draftSchema.superRefine((draft, ctx) => {
   }
 });
 
+export const processFileSchema = z.object({
+  format: z.literal("workshape-process"),
+  version: z.literal(1),
+  definition: definitionSchema,
+}).strict();
+
 export function prepareAiDraft(output: z.infer<typeof aiDraftSchema>) {
   const { process } = output;
   const questions: string[] = [];

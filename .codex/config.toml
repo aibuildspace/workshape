@@ -1,0 +1,3 @@
+[mcp_servers.workshape]
+url = "http://127.0.0.1:3000/api/mcp"
+bearer_token_env_var = "WORKSHAPE_MCP_TOKEN"

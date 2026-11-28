@@ -8,12 +8,13 @@ export function RequestFields({ fields, values, onValueChange }: {
   onValueChange?: (key: string, value: string) => void;
 }) {
   return <>{fields.map((field, index) => {
+    const update = onValueChange ? (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      onValueChange(field.key, event.target.value) : undefined;
     const props = {
       name: "field:" + field.key,
       required: field.required,
       value: values ? (Object.hasOwn(values, field.key) ? values[field.key] : "") : undefined,
-      onChange: onValueChange ? (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-        onValueChange(field.key, event.target.value) : undefined,
+      onChange: update,
     };
     return <label key={field.key}>
       <span>{field.label.trim() || `Field ${index + 1}`}{!field.required && <small className="optional">Optional</small>}</span>
@@ -22,7 +23,9 @@ export function RequestFields({ fields, values, onValueChange }: {
           {[...new Set(field.options.map((option) => option.trim()).filter(Boolean))].map((option) => <option key={option}>{option}</option>)}
         </select>
         : field.type === "textarea" ? <textarea {...props} rows={4} maxLength={4000} />
-          : <input {...props} type={field.type} maxLength={4000} />}
+          : <input {...props} type={field.type} maxLength={4000}
+              onInput={field.type === "date" && onValueChange ? (event) =>
+                onValueChange(field.key, event.currentTarget.value) : undefined} />}
     </label>;
   })}</>;
 }

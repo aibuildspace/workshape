@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { db } from "./db";
+import { db, transaction } from "./db";
 
 export const roles = ["employee", "manager", "hr", "function_owner"] as const;
 export type Role = (typeof roles)[number];
@@ -14,7 +14,7 @@ const accountSchema = z.object({
   email: z.email().max(254),
   name: z.string().trim().min(1).max(100),
   role: z.enum(roles),
-  password: z.string().min(12).max(256),
+  password: z.string().min(15).max(256),
   managerEmail: z.email().optional(),
   oauthSubject: z.string().trim().min(1).max(250).optional(),
 });
@@ -29,6 +29,25 @@ function digest(value: string) {
 
 function passwordHash(password: string, salt: string) {
   return scryptSync(password, salt, 64);
+}
+
+export class PasswordError extends Error {}
+
+function validateNewPassword(password: string) {
+  if (password.length < 15 || password.length > 256) {
+    throw new PasswordError("Use a password between 15 and 256 characters.");
+  }
+}
+
+function replacePassword(userId: string, password: string) {
+  validateNewPassword(password);
+  const salt = randomBytes(16).toString("hex");
+  const hash = salt + ":" + passwordHash(password, salt).toString("hex");
+  transaction(() => {
+    db().prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, userId);
+    db().prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    db().prepare("DELETE FROM mcp_tokens WHERE user_id = ?").run(userId);
+  });
 }
 
 const actorColumns = "u.id, u.name, u.email, u.role, u.manager_id";
@@ -70,6 +89,24 @@ export function authenticate(email: string, password: string) {
     const { id, name, email, role, manager_id } = user;
     return { id, name, email, role, manager_id };
   }
+}
+
+export function changePassword(actor: Actor, currentPassword: string, nextPassword: string) {
+  validateNewPassword(nextPassword);
+  if (authenticate(actor.email, currentPassword)?.id !== actor.id) {
+    throw new PasswordError("The current password is incorrect.");
+  }
+  if (currentPassword === nextPassword) {
+    throw new PasswordError("Choose a password different from your current password.");
+  }
+  replacePassword(actor.id, nextPassword);
+}
+
+// Recovery is available only to an operator with access to the local account CLI.
+export function resetPassword(email: string, nextPassword: string) {
+  const actor = accountByEmail(email);
+  if (!actor) throw new PasswordError("Account not found.");
+  replacePassword(actor.id, nextPassword);
 }
 
 export const sessionDuration = 8 * 60 * 60;
